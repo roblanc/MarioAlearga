@@ -2,14 +2,10 @@
 <html lang="ro">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mario Surfer Retro</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        * {
-            -webkit-tap-highlight-color: transparent;
-            -webkit-touch-callout: none;
-        }
         body {
             display: flex;
             flex-direction: column;
@@ -121,58 +117,48 @@
         .hallucination.active {
             opacity: 1;
             transform: translate(
-                calc(-50% + (random(-100, 100) * 1px),
-                calc(-50% + (random(-100, 100) * 1px)
-            ) rotate(random(-360, 360)deg);
+                (random(-100, 100))px,
+                (random(-100, 100))px
+            ) rotate(random(-360, 360))deg;
         }
+
         #touchControls {
-            display: none;
-            position: fixed;
-            bottom: 20px;
-            gap: 15px;
+            display: flex;
             justify-content: center;
             align-items: center;
+            margin-top: 20px;
             z-index: 1000;
         }
         #leftButton, #rightButton {
-            background-color: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(3px);
+            background-color: rgba(255, 255, 255, 0.5);
             color: white;
             border: none;
-            padding: 20px 35px;
+            padding: 15px 30px;
             text-align: center;
             text-decoration: none;
             display: inline-block;
-            font-size: 24px;
+            font-size: 20px;
             margin: 4px 8px;
             cursor: pointer;
-            border-radius: 10px;
+            border-radius: 5px;
+            font-family: 'Press Start 2P', cursive;
             user-select: none;
             touch-action: manipulation;
         }
         #leftButton:active, #rightButton:active {
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(255, 255, 255, 0.8);
         }
         @media (min-width: 600px) {
             #touchControls {
                 display: none;
             }
         }
-        #mobileStart {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 1000;
-            padding: 20px 40px;
-            font-size: 1.5em;
-        }
     </style>
 </head>
 <body>
+
     <h1>Mario Surfer Retro</h1>
-    <button id="mobileStart">Start Game</button>
+
     <canvas id="gameCanvas"></canvas>
     <div id="info">
         <div id="score">Scor: 0</div>
@@ -186,6 +172,15 @@
         <p id="messageText">Game Over!</p>
         <button id="restartButton">Restart</button>
     </div>
+
+    <audio id="regularMusic" loop preload="auto">
+        <source src="audio/regular_music.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    <audio id="lsdMusic" loop preload="auto">
+        <source src="audio/lsd_music.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
 
     <div id="touchControls">
         <button id="leftButton">←</button>
@@ -201,77 +196,475 @@
         const restartButton = document.getElementById('restartButton');
         const obstacleSpeedDisplay = document.getElementById('obstacleSpeedDisplay');
         const horiaSpeedDisplay = document.getElementById('horiaSpeedDisplay');
+        const speedInfoElement = document.getElementById('speedInfo');
         const body = document.body;
         const leftButton = document.getElementById('leftButton');
         const rightButton = document.getElementById('rightButton');
-        const mobileStartButton = document.getElementById('mobileStart');
 
-        // Mobile detection
-        function isMobile() {
-            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        }
+        ctx.imageSmoothingEnabled = false;
 
-        // Initialize mobile elements
-        if (isMobile()) {
-            mobileStartButton.style.display = 'block';
-            document.getElementById('touchControls').style.display = 'none';
-        }
+        let gameSpeed = 3;
+        let score = 0;
+        let obstacles = [];
+        let gameRunning = true;
+        let animationFrameId;
+        let playerSpeed = 8;
+        let gameMessage = '';
+        let nightMode = false;
+        let hallucinationTimeout;
+        let hallucinations = [];
+        let touchStartX = null; // For single touch detection
 
-        // Mobile start handler
-        mobileStartButton.addEventListener('click', function() {
-            if (document.documentElement.requestFullscreen) {
-                document.documentElement.requestFullscreen();
+        // --- Music ---
+        const regularMusic = document.getElementById('regularMusic');
+        const lsdMusic = document.getElementById('lsdMusic');
+        let currentMusic = null;
+
+        function playRegularMusic() {
+            if (currentMusic !== regularMusic) {
+                stopMusic();
+                regularMusic.volume = 0.5;
+                regularMusic.play().catch(e => console.error("Error playing regular music:", e));
+                currentMusic = regularMusic;
             }
-            startGame();
-            this.style.display = 'none';
-            document.getElementById('touchControls').style.display = 'flex';
+        }
+
+        function playLSDMusic() {
+            if (currentMusic !== lsdMusic) {
+                stopMusic();
+                lsdMusic.volume = 0.5;
+                lsdMusic.play().catch(e => console.error("Error playing LSD music:", e));
+                currentMusic = lsdMusic;
+            }
+        }
+
+        function stopMusic() {
+            if (currentMusic) {
+                currentMusic.pause();
+                currentMusic.currentTime = 0;
+            }
+            currentMusic = null;
+        }
+        // --- End Music ---
+
+        function resizeCanvas() {
+            const aspectRatio = 1 / 1.5;
+            const maxHeight = window.innerHeight * 0.7;
+            const maxWidth = window.innerWidth * 0.9;
+
+            let newHeight = maxHeight;
+            let newWidth = newHeight * aspectRatio;
+
+            if (newWidth > maxWidth) {
+                newWidth = maxWidth;
+                newHeight = newWidth / aspectRatio;
+            }
+
+            canvas.width = Math.floor(newWidth);
+            canvas.height = Math.floor(newHeight);
+
+            ctx.imageSmoothingEnabled = false;
+
+            player.width = canvas.width / 10;
+            player.height = player.width * 1.2;
+            player.y = canvas.height * 0.8;
+
+            if (gameRunning) {
+                player.x = canvas.width / 2 - player.width / 2;
+                draw();
+            } else {
+                drawGameOverScreen();
+            }
+        }
+
+        const player = {
+            width: canvas.width / 10,
+            height: canvas.width / 10 * 1.2,
+            x: canvas.width / 2 - (canvas.width / 10) / 2,
+            y: canvas.height * 0.8,
+            speed: playerSpeed,
+            color: '#ffdb58',
+            hairColor: '#d43f00'
+        };
+
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            ctx.fillStyle = player.hairColor;
+            ctx.fillRect(player.x, player.y, player.width, player.height * 0.2);
+
+            // Draw "Mario" text above the player
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `${Math.round(player.width / 3)}px 'Press Start 2P'`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText("Mario", player.x + player.width / 2, player.y - 5);
+        }
+
+        class Obstacle {
+            constructor() {
+                const baseWidth = canvas.width / 12;
+                const randomWidth = Math.random() * (canvas.width / 15);
+                this.width = baseWidth + randomWidth;
+                this.height = this.width * 1.3;
+                this.x = Math.random() * (canvas.width - this.width);
+                this.y = -this.height;
+                this.speedY = gameSpeed + Math.random() * 1.5;
+                this.speedX = 0;
+                this.avoidSpeed = 4 + Math.random();
+                this.avoiding = false;
+                this.type = (Math.random() < 0.1) ? 'LSD' : ((randomWidth > (canvas.width / 15) / 2) ? 'Cox' : 'Coxulet');
+                this.labelText = this.type;
+                this.color = (this.type === 'LSD') ? '#9932CC' : '#e65100';
+            }
+
+            update() {
+                this.y += this.speedY / 2.2;
+                this.x += this.speedX;
+
+                if (!this.avoiding) {
+                    this.speedX = 0;
+                }
+                this.avoiding = false;
+
+                const avoidDistanceY = canvas.height * 0.4;
+                const avoidDistanceX = player.width * 1.8;
+
+                if (this.y > player.y - avoidDistanceY && this.y < player.y + player.height) {
+                    const dx = (player.x + player.width / 2) - (this.x + this.width / 2);
+
+                    if (Math.abs(dx) < this.width / 2 + player.width / 2 + avoidDistanceX) {
+                        this.avoiding = true;
+                        if (dx < 0) {
+                            this.speedX = this.avoidSpeed;
+                        } else {
+                            this.speedX = -this.avoidSpeed;
+                        }
+                    }
+                }
+
+                if (this.x + this.width < 0 || this.x > canvas.width) {
+                    this.y = canvas.height + 100;
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+
+                ctx.fillStyle = (this.type === 'LSD') ? '#b041ff' : '#b83e00';
+                const topHeight = this.height * 0.15;
+                ctx.fillRect(this.x, this.y, this.width, topHeight);
+
+                ctx.strokeStyle = (this.type === 'LSD') ? '#7a29a3' : '#872e00';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+
+                ctx.fillStyle = '#fff';
+                const fontSize = Math.max(6, this.width * 0.15);
+                ctx.font = `${fontSize}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const textY = this.y + topHeight + (this.height - topHeight) / 2;
+                ctx.fillText(this.labelText, this.x + this.width / 2, textY);
+            }
+        }
+
+        let obstacleTimer = 0;
+        let obstacleInterval = 80;
+
+        function handleObstacles(frames) {
+            obstacleTimer++;
+            if (obstacleTimer % Math.floor(obstacleInterval) === 0) {
+                if (Math.random() > 0.3) {
+                    obstacles.push(new Obstacle());
+                }
+                if (obstacleInterval > 30) {
+                    obstacleInterval -= 0.5;
+                }
+                if (gameSpeed < 8) {
+                   // gameSpeed += 0.03;
+                }
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                obstacles[i].draw();
+
+                if (
+                    player.x < obstacles[i].x + obstacles[i].width &&
+                    player.x + player.width > obstacles[i].x &&
+                    player.y < obstacles[i].y + obstacles[i].height &&
+                    player.y + player.height > obstacles[i].y
+                ) {
+                    let caughtType = obstacles[i].type;
+                    obstacles.splice(i, 1);
+
+                    let speedIncrease = 0;
+                    if (caughtType === 'Cox') {
+                        speedIncrease = gameSpeed * 0.10;
+                        playerSpeed += speedIncrease;
+                        player.speed = playerSpeed;
+                        gameMessage = `Ai prins Cox! Viteza +${(speedIncrease / gameSpeed * 100).toFixed(0)}%`;
+                    } else if (caughtType === 'Coxulet') {
+                        speedIncrease = gameSpeed * 0.05;
+                        playerSpeed += speedIncrease;
+                        player.speed = playerSpeed;
+                        gameMessage = `Ai prins Coxulet! Viteza +${(speedIncrease / gameSpeed * 100).toFixed(0)}%`;
+                    } else if (caughtType === 'LSD') {
+                        gameMessage = "Franta Franta LSD boost!";
+                        startNightMode();
+                    }
+                    score++;
+                    scoreElement.textContent = score;
+                    showGameMessage(gameMessage, caughtType);
+                    return;
+                }
+
+                if (obstacles[i].y > canvas.height) {
+                    obstacles.splice(i, 1);
+                    score++;
+                    scoreElement.textContent = score;
+                }
+            }
+        }
+
+        let moveLeft = false;
+        let moveRight = false;
+
+        window.addEventListener('keydown', (e) => {
+            if (!gameRunning) return;
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                moveLeft = true;
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                moveRight = true;
+            }
         });
 
-        // Touch movement handlers
-        let touchStartX = 0;
-        canvas.addEventListener('touchstart', (e) => {
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+                moveLeft = false;
+            } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+                moveRight = false;
+            }
+        });
+
+        // Touch events for on-screen buttons
+        leftButton.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            touchStartX = e.touches[0].clientX;
+            moveLeft = true;
+        });
+        leftButton.addEventListener('touchend', () => {
+            moveLeft = false;
+        });
+        rightButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            moveRight = true;
+        });
+        rightButton.addEventListener('touchend', () => {
+            moveRight = false;
+        });
+
+       // New touch event listeners for canvas
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+            }
+            e.preventDefault(); // Prevents additional mouse events
         });
 
         canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
+           if (!touchStartX) return;
+
             const touchX = e.touches[0].clientX;
-            const diff = touchX - touchStartX;
-            
-            if (Math.abs(diff) > 10) {
-                moveRight = diff > 0;
-                moveLeft = !moveRight;
+            const touchDiff = touchX - touchStartX;
+
+            if (touchDiff > 5) { // Adjust sensitivity as needed
+                moveRight = true;
+                moveLeft = false;
+            } else if (touchDiff < -5) {
+                moveLeft = true;
+                moveRight = false;
+            } else {
+                moveLeft = false;
+                moveRight = false;
             }
+            touchStartX = touchX;
+
         });
 
         canvas.addEventListener('touchend', () => {
+            touchStartX = null;
             moveLeft = false;
             moveRight = false;
         });
 
-        // Rest of game code remains the same as original with these additions:
-        // ... [INSERT ALL THE ORIGINAL JAVASCRIPT CODE HERE] ...
-        // Make sure to include the full original script content
+        function updatePlayerPosition() {
+            if (moveLeft && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if (moveRight && player.x < canvas.width - player.width) {
+                player.x += player.speed;
+            }
+        }
 
-        // Add the original JavaScript code here, making sure to:
-        // 1. Include the startNightMode timeout fix:
-        setTimeout(() => {
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = nightMode ? '#000020' : '#42b6f5';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            drawPlayer();
+             if (nightMode) {
+                drawHallucinations();
+            }
+        }
+
+        function drawGameOverScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = `${Math.max(15, canvas.width / 18)}px 'Press Start 2P'`;
+            ctx.textAlign = 'center';
+            ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - canvas.height * 0.05);
+            ctx.font = `${Math.max(10, canvas.width / 28)}px 'Press Start 2P'`;
+            ctx.fillText(`Scor Final: ${score}`, canvas.width / 2, canvas.height / 2 + canvas.height * 0.03);
+        }
+
+        let frameCount = 0;
+        function gameLoop() {
+            if (!gameRunning) {
+                drawGameOverScreen();
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updatePlayerPosition();
+            drawPlayer();
+            handleObstacles(frameCount);
+            frameCount++;
+            obstacleSpeedDisplay.textContent = gameSpeed.toFixed(2);
+            horiaSpeedDisplay.textContent = playerSpeed.toFixed(2);
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            messageText.textContent = `Game Over! Scor: ${score}`;
+            messageBox.style.display = 'block';
+            drawGameOverScreen();
+            stopMusic();
+        }
+
+        function startGame() {
+            score = 0;
+            obstacles = [];
+            gameSpeed = 3;
+            obstacleTimer = 0;
+            obstacleInterval = 80;
+            playerSpeed = 8;
+            player.speed = playerSpeed;
+            player.width = canvas.width / 10;
+            player.height = player.width * 1.2;
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height * 0.8;
+            moveLeft = false;
+            moveRight = false;
+            gameRunning = true;
+            scoreElement.textContent = score;
+            messageBox.style.display = 'none';
             nightMode = false;
             body.classList.remove('nightMode');
             canvas.classList.remove('nightMode');
             clearTimeout(hallucinationTimeout);
             hallucinations.forEach(h => h.remove());
             hallucinations = [];
+            cancelAnimationFrame(animationFrameId);
             playRegularMusic();
-        }, 10000); // LSD effect lasts 10 seconds
+            gameLoop();
+        }
 
-        // 2. Add the restart button handler:
-        restartButton.addEventListener('click', startGame);
+        function showGameMessage(msg, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = msg;
+            messageDiv.style.position = 'absolute';
+            messageDiv.style.top = '20%';
+            messageDiv.style.left = `${random(10, 90)}%`;
+            messageDiv.style.transform = 'translate(-50%, -50%)';
+            messageDiv.style.backgroundColor =
+                (type === 'Cox') ? 'rgba(56, 142, 60, 0.8)' :
+                (type === 'Coxulet') ? 'rgba(213, 0, 0, 0.8)' :
+                'rgba(153, 50, 204, 0.8)';
+            messageDiv.style.color = '#fff';
+            messageDiv.style.padding = '10px 20px';
+            messageDiv.style.borderRadius = '5px';
+            messageDiv.style.zIndex = '10';
+            messageDiv.style.fontFamily =  "'Press Start 2P', cursive";
+            messageDiv.style.fontSize = '0.8em';
+            document.body.appendChild(messageDiv);
 
-        // 3. Add window resize handler:
-        window.addEventListener('resize', resizeCanvas);
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 3000);
+        }
+
+        function startNightMode() {
+            if (nightMode) return;
+
+            nightMode = true;
+            body.classList.add('nightMode');
+            canvas.classList.add('nightMode');
+            playLSDMusic();
+
+            // Create hallucinations
+            for (let i = 0; i < 7; i++) {
+                const hallucination = document.createElement('div');
+                hallucination.className = 'hallucination';
+                hallucination.style.width = `${random(70, 200)}px`;
+                hallucination.style.height = `${random(70, 200)}px`;
+                hallucination.style.backgroundColor = `hsl(${random(0, 360)}, 100%, ${random(50, 70)}%)`;
+                hallucination.style.borderRadius = '50%';
+                hallucination.style.position = 'absolute';
+                hallucination.style.left = `${random(0, 100)}%`;
+                hallucination.style.top = `${random(0, 100)}%`;
+                hallucination.style.boxShadow = `0 0 ${random(10, 30)}px white`;
+                hallucination.style.animation = `hallucinate ${random(2, 5)}s infinite alternate`;
+                document.body.appendChild(hallucination);
+                hallucinations.push(hallucination);
+            }
+
+            let activeIndex = 0;
+            hallucinationTimeout = setInterval(() => {
+                hallucinations.forEach(h => h.classList.remove('active'));
+                hallucinations[activeIndex].classList.add('active');
+                activeIndex = (activeIndex + 1) % hallucinations.length;
+            }, 500);
+
+            setTimeout(() => {
+                nightMode = false;
+                body.classList.remove('nightMode');
+                canvas.classList.remove('nightMode');
+                clearTimeout(hallucinationTimeout);
+                hallucinations.forEach(h => h.remove());
+                hallucinations = [];
+                playRegularMusic();
+            }, 10000);
+        }
+
+        function drawHallucinations() {
+            hallucinations.forEach(hallucination => {
+                // No need to draw here, CSS animation handles visual changes
+            });
+        }
+
+        function random(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
         resizeCanvas();
+        startGame();
+
+        window.addEventListener('resize', resizeCanvas);
+        restartButton.addEventListener('click', startGame);
     </script>
 </body>
 </html>

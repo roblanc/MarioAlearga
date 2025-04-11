@@ -45,7 +45,7 @@
             flex-direction: column;
             align-items: center;
         }
-         #info {
+        #info {
             font-size: 1.2em;
         }
         button {
@@ -112,14 +112,46 @@
             pointer-events: none;
             z-index: 100;
             opacity: 0;
-            transition: opacity 0.2s ease, transform 0.2s ease; /* Increased speed */
+            transition: opacity 0.2s ease, transform 0.2s ease;
         }
         .hallucination.active {
             opacity: 1;
             transform: translate(
-                (random(-100, 100))px, /* Increased range */
-                (random(-100, 100))px  /* Increased range */
-            ) rotate(random(-360, 360))deg; /* Increased rotation */
+                (random(-100, 100))px,
+                (random(-100, 100))px
+            ) rotate(random(-360, 360))deg;
+        }
+
+        #touchControls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+            z-index: 1000;
+        }
+        #leftButton, #rightButton {
+            background-color: rgba(255, 255, 255, 0.5);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 20px;
+            margin: 4px 8px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: 'Press Start 2P', cursive;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        #leftButton:active, #rightButton:active {
+            background-color: rgba(255, 255, 255, 0.8);
+        }
+        @media (min-width: 600px) {
+            #touchControls {
+                display: none;
+            }
         }
     </style>
 </head>
@@ -150,6 +182,11 @@
         Your browser does not support the audio element.
     </audio>
 
+    <div id="touchControls">
+        <button id="leftButton">←</button>
+        <button id="rightButton">→</button>
+    </div>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -161,6 +198,8 @@
         const horiaSpeedDisplay = document.getElementById('horiaSpeedDisplay');
         const speedInfoElement = document.getElementById('speedInfo');
         const body = document.body;
+        const leftButton = document.getElementById('leftButton');
+        const rightButton = document.getElementById('rightButton');
 
         ctx.imageSmoothingEnabled = false;
 
@@ -174,6 +213,7 @@
         let nightMode = false;
         let hallucinationTimeout;
         let hallucinations = [];
+        let touchStartX = null; // For single touch detection
 
         // --- Music ---
         const regularMusic = document.getElementById('regularMusic');
@@ -255,11 +295,11 @@
             ctx.fillRect(player.x, player.y, player.width, player.height * 0.2);
 
             // Draw "Mario" text above the player
-            ctx.fillStyle = '#ffffff'; // White text
-            ctx.font = `${Math.round(player.width / 3)}px 'Press Start 2P'`; // Adjust font size relative to player width
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `${Math.round(player.width / 3)}px 'Press Start 2P'`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'bottom';
-            ctx.fillText("Mario", player.x + player.width / 2, player.y - 5); // Position above the player
+            ctx.fillText("Mario", player.x + player.width / 2, player.y - 5);
         }
 
         class Obstacle {
@@ -337,7 +377,7 @@
         function handleObstacles(frames) {
             obstacleTimer++;
             if (obstacleTimer % Math.floor(obstacleInterval) === 0) {
-                if (Math.random() > 0.3) { // 70% chance of obstacle appearing
+                if (Math.random() > 0.3) {
                     obstacles.push(new Obstacle());
                 }
                 if (obstacleInterval > 30) {
@@ -408,6 +448,56 @@
             } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
                 moveRight = false;
             }
+        });
+
+        // Touch events for on-screen buttons
+        leftButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            moveLeft = true;
+        });
+        leftButton.addEventListener('touchend', () => {
+            moveLeft = false;
+        });
+        rightButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            moveRight = true;
+        });
+        rightButton.addEventListener('touchend', () => {
+            moveRight = false;
+        });
+
+       // New touch event listeners for canvas
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+            }
+            e.preventDefault(); // Prevents additional mouse events
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+           if (!touchStartX) return;
+
+            const touchX = e.touches[0].clientX;
+            const touchDiff = touchX - touchStartX;
+
+            if (touchDiff > 5) { // Adjust sensitivity as needed
+                moveRight = true;
+                moveLeft = false;
+            } else if (touchDiff < -5) {
+                moveLeft = true;
+                moveRight = false;
+            } else {
+                moveLeft = false;
+                moveRight = false;
+            }
+            touchStartX = touchX;
+
+        });
+
+        canvas.addEventListener('touchend', () => {
+            touchStartX = null;
+            moveLeft = false;
+            moveRight = false;
         });
 
         function updatePlayerPosition() {
@@ -526,18 +616,18 @@
             playLSDMusic();
 
             // Create hallucinations
-            for (let i = 0; i < 7; i++) { // More hallucinations
+            for (let i = 0; i < 7; i++) {
                 const hallucination = document.createElement('div');
                 hallucination.className = 'hallucination';
-                hallucination.style.width = `${random(70, 200)}px`; // Increased size
-                hallucination.style.height = `${random(70, 200)}px`;// Increased size
-                hallucination.style.backgroundColor = `hsl(${random(0, 360)}, 100%, ${random(50, 70)}%)`; // Varying intensity
+                hallucination.style.width = `${random(70, 200)}px`;
+                hallucination.style.height = `${random(70, 200)}px`;
+                hallucination.style.backgroundColor = `hsl(${random(0, 360)}, 100%, ${random(50, 70)}%)`;
                 hallucination.style.borderRadius = '50%';
                 hallucination.style.position = 'absolute';
                 hallucination.style.left = `${random(0, 100)}%`;
                 hallucination.style.top = `${random(0, 100)}%`;
-                hallucination.style.boxShadow = `0 0 ${random(10, 30)}px white`; // Add glow
-                hallucination.style.animation = `hallucinate ${random(2, 5)}s infinite alternate`; // Add animation
+                hallucination.style.boxShadow = `0 0 ${random(10, 30)}px white`;
+                hallucination.style.animation = `hallucinate ${random(2, 5)}s infinite alternate`;
                 document.body.appendChild(hallucination);
                 hallucinations.push(hallucination);
             }
@@ -547,7 +637,7 @@
                 hallucinations.forEach(h => h.classList.remove('active'));
                 hallucinations[activeIndex].classList.add('active');
                 activeIndex = (activeIndex + 1) % hallucinations.length;
-            }, 500); // Faster switching
+            }, 500);
 
             setTimeout(() => {
                 nightMode = false;
@@ -561,41 +651,20 @@
         }
 
         function drawHallucinations() {
-            // hallucinations.forEach(h => {  <--  NU MAI DESENAM, SUNT DIV-URI
-            //     ctx.fillStyle = h.style.backgroundColor;
-            //     ctx.beginPath();
-            //     ctx.arc(parseFloat(h.style.left), parseFloat(h.style.top), 50, 0, 2 * Math.PI);
-            //     ctx.fill();
-            // });
+            hallucinations.forEach(hallucination => {
+                // No need to draw here, CSS animation handles visual changes
+            });
         }
 
         function random(min, max) {
             return Math.floor(Math.random() * (max - min + 1)) + min;
         }
 
-        restartButton.addEventListener('click', startGame);
+        resizeCanvas();
+        startGame();
 
         window.addEventListener('resize', resizeCanvas);
-
-        window.onload = () => {
-            resizeCanvas();
-            startGame();
-        };
-
+        restartButton.addEventListener('click', startGame);
     </script>
-
 </body>
-<style>
-@keyframes hallucinate {
-  from {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  to {
-    transform: translate(
-      (random(-100, 100))px,
-      (random(-100, 100))px
-    ) rotate(random(-360, 360))deg;
-  }
-}
-</style>
 </html>

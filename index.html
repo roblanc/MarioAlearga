@@ -157,7 +157,7 @@
 </head>
 <body>
 
-    <h1>Mario Surfer Retro</h1>
+    <h1 style="font-size: 1.5em; color: yellow;">Mario Surfer Retro</h1>
 
     <canvas id="gameCanvas"></canvas>
     <div id="info">
@@ -475,7 +475,7 @@
         });
 
         canvas.addEventListener('touchmove', (e) => {
-           if (!touchStartX) return;
+            if (!touchStartX) return;
 
             const touchX = e.touches[0].clientX;
             const touchDiff = touchX - touchStartX;

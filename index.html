@@ -129,7 +129,7 @@
             margin-top: 20px;
             z-index: 1000;
         }
-        #leftButton, #rightButton {
+        #leftButton, #rightButton, #upButton, #downButton {
             background-color: rgba(255, 255, 255, 0.5);
             color: white;
             border: none;
@@ -145,7 +145,7 @@
             user-select: none;
             touch-action: manipulation;
         }
-        #leftButton:active, #rightButton:active {
+        #leftButton:active, #rightButton:active, #upButton:active, #downButton:active {
             background-color: rgba(255, 255, 255, 0.8);
         }
         @media (min-width: 600px) {
@@ -185,6 +185,8 @@
     <div id="touchControls">
         <button id="leftButton">←</button>
         <button id="rightButton">→</button>
+        <button id="upButton">↑</button>
+        <button id="downButton">↓</button>
     </div>
 
     <script>
@@ -200,6 +202,8 @@
         const body = document.body;
         const leftButton = document.getElementById('leftButton');
         const rightButton = document.getElementById('rightButton');
+        const upButton = document.getElementById('upButton');
+        const downButton = document.getElementById('downButton');
 
         ctx.imageSmoothingEnabled = false;
 
@@ -214,7 +218,9 @@
         let hallucinationTimeout;
         let hallucinations = [];
         let touchStartX = null;
+        let touchStartY = null;
         let touchVelX = 0;
+        let touchVelY = 0;
         let lastTouchTime = 0;
 
 
@@ -435,6 +441,8 @@
 
         let moveLeft = false;
         let moveRight = false;
+        let moveUp = false;
+        let moveDown = false;
 
         window.addEventListener('keydown', (e) => {
             if (!gameRunning) return;
@@ -444,6 +452,12 @@
             } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
                 moveRight = true;
                 moveLeft = false;
+            }  else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                moveUp = true;
+                moveDown = false;
+            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                moveDown = true;
+                moveUp = false;
             }
         });
 
@@ -452,6 +466,10 @@
                 moveLeft = false;
             } else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
                 moveRight = false;
+            } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+                moveUp = false;
+            } else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+                moveDown = false;
             }
         });
 
@@ -474,33 +492,57 @@
             moveRight = false;
             touchVelX = 0;
         });
+        upButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            moveUp = true;
+            moveDown = false;
+        });
+        upButton.addEventListener('touchend', () => {
+            moveUp = false;
+            touchVelY = 0;
+        });
+        downButton.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            moveDown = true;
+            moveUp = false;
+        });
+        downButton.addEventListener('touchend', () => {
+            moveDown = false;
+            touchVelY = 0;
+        });
 
         // New touch event listeners for canvas
         canvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
                 lastTouchTime = Date.now();
                 touchVelX = 0;
+                touchVelY = 0;
             }
             e.preventDefault();
         });
 
         canvas.addEventListener('touchmove', (e) => {
-            if (!touchStartX) return;
+            if (!touchStartX || !touchStartY) return;
 
             const touchX = e.touches[0].clientX;
+            const touchY = e.touches[0].clientY;
             const currentTime = Date.now();
             const deltaTime = currentTime - lastTouchTime;
-            const touchDiff = touchX - touchStartX;
+            const touchDiffX = touchX - touchStartX;
+            const touchDiffY = touchY - touchStartY;
 
             // Calculate velocity
-            const velocity = touchDiff / deltaTime;
-            touchVelX = velocity;
+            const velocityX = touchDiffX / deltaTime;
+            const velocityY = touchDiffY / deltaTime;
+            touchVelX = velocityX;
+            touchVelY = velocityY;
 
-            if (touchDiff > 5) {
+            if (touchDiffX > 5) {
                 moveRight = true;
                 moveLeft = false;
-            } else if (touchDiff < -5) {
+            } else if (touchDiffX < -5) {
                 moveLeft = true;
                 moveRight = false;
             } else {
@@ -508,32 +550,61 @@
                 moveRight = false;
             }
 
+            if (touchDiffY > 5) {
+                moveDown = true;
+                moveUp = false;
+            } else if (touchDiffY < -5) {
+                moveUp = true;
+                moveDown = false;
+            } else {
+                moveUp = false;
+                moveDown = false;
+            }
+
             touchStartX = touchX;
+            touchStartY = touchY;
             lastTouchTime = currentTime;
         });
 
         canvas.addEventListener('touchend', () => {
             touchStartX = null;
+            touchStartY = null;
             moveLeft = false;
             moveRight = false;
+            moveUp = false;
+            moveDown = false;
             touchVelX = 0;
+            touchVelY = 0;
         });
 
         function updatePlayerPosition() {
-           let targetSpeed = 0;
+            let targetSpeedX = 0;
+            let targetSpeedY = 0;
 
             if (moveLeft) {
-                targetSpeed = -player.speed;
+                targetSpeedX = -player.speed;
             }
             if (moveRight) {
-                targetSpeed = player.speed;
+                targetSpeedX = player.speed;
+            }
+            if (moveUp) {
+                targetSpeedY = -player.speed;
+            }
+            if (moveDown) {
+                targetSpeedY = player.speed;
             }
 
             // Add a simple acceleration
             if (touchVelX !== 0) {
                 player.x += touchVelX * 3;
             } else {
-                 player.x += targetSpeed;
+                player.x += targetSpeedX;
+            }
+
+            if (touchVelY !== 0) {
+                player.y += touchVelY * 3;
+            } else {
+                player.y += targetSpeedY;
             }
 
 
@@ -543,6 +614,12 @@
             if (player.x > canvas.width - player.width) {
                 player.x = canvas.width - player.width;
             }
+            if (player.y < 0) {
+                player.y = 0;
+            }
+            if (player.y > canvas.height - player.height) {
+                player.y = canvas.height - player.height;
+            }
         }
 
         function draw() {
@@ -550,7 +627,7 @@
             ctx.fillStyle = nightMode ? '#000020' : '#42b6f5';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             drawPlayer();
-             if (nightMode) {
+            if (nightMode) {
                 drawHallucinations();
             }
         }
@@ -605,6 +682,8 @@
             player.y = canvas.height * 0.8;
             moveLeft = false;
             moveRight = false;
+            moveUp = false;
+            moveDown = false;
             gameRunning = true;
             scoreElement.textContent = score;
             messageBox.style.display = 'none';
